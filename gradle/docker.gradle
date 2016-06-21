@@ -30,8 +30,6 @@ task buildDockerfile (type: Dockerfile) {
 
 task buildDockerImage (type: Exec) {
 	dependsOn buildDockerfile
-    println "***$registryServer/khai/$project.name:$version"
-    println "***$buildDockerfile.dockerDir"
 	commandLine "docker", "build", "-t", "$registryServer/khai/$project.name:$version", "$buildDockerfile.dockerDir"
 }
 
