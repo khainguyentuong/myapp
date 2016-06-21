@@ -1,0 +1,127 @@
+repositories {
+	mavenLocal()
+	mavenCentral()
+}
+
+sourceSets.main.resources.srcDir "src/main/java"
+sourceCompatibility = JavaVersion.VERSION_1_8
+targetCompatibility = JavaVersion.VERSION_1_8
+
+dependencies {
+	compile "io.fastjson:boon:0.33"
+
+	testCompile "junit:junit:4.11"
+	testCompile "org.slf4j:slf4j-simple:[1.7,1.8)"
+}
+
+task buildDockerfile (type: Dockerfile) {
+	dependsOn distTar
+	from "java:openjdk-8"
+	add "$distTar.archivePath", "/"
+	workdir "/$distTar.archivePath.name" - ".$distTar.extension" + "/bin"
+	entrypoint "./$project.name"
+	if (project.dockerPort) {
+		expose project.dockerPort
+	}
+	if (project.jmxPort) {
+		expose project.jmxPort
+	}
+}
+
+task buildDockerImage (type: Exec) {
+	dependsOn buildDockerfile
+    println "***$registryServer/khai/$project.name:$version"
+    println "***$buildDockerfile.dockerDir"
+	commandLine "docker", "build", "-t", "$registryServer/khai/$project.name:$version", "$buildDockerfile.dockerDir"
+}
+
+task pushDockerImage (type: Exec) {
+	dependsOn buildDockerfile
+	commandLine "docker", "push", "khai/$project.name"
+}
+
+task runDockerImage (type: Exec) {
+	dependsOn buildDockerImage
+	if (project.dockerPort) {
+	    commandLine "docker", "run", "-i", "-p", "$project.dockerPort:$project.dockerPort", "-t", "khai/$project.name:$version"
+	}
+    else {
+	    commandLine "docker", "run", "-i", "-t", "khai/$project.name:$version"
+	}
+}
+
+task runDocker (type: Exec) {
+	if (project.dockerPort) {
+	    commandLine "docker", "run", "-i", "-p", "$project.dockerPort:$project.dockerPort", "-t", "khai/$project.name:$version"
+	}
+    else {
+	    commandLine "docker", "run", "-i", "-t", "khai/$project.name:$version"
+	}
+}
+
+class Dockerfile extends DefaultTask {
+    def dockerfileInfo = ""
+    def dockerDir = "$project.buildDir/docker"
+    def dockerfileDestination = "$project.buildDir/docker/Dockerfile"
+    def filesToCopy = []
+
+    File getDockerfileDestination() {
+        project.file(dockerfileDestination)
+    }
+
+    def from(image="java") {
+        dockerfileInfo += "FROM $image\r\n"
+    }
+
+    def maintainer(contact) {
+        maintainer += "MAINTAINER $contact\r\n"
+    }
+
+    def add(sourceLocation, targetLocation) {
+        filesToCopy << sourceLocation
+        def file = project.file(sourceLocation)
+        dockerfileInfo += "ADD $file.name ${targetLocation}\r\n"
+    }
+
+    def run(command) {
+        dockerfileInfo += "RUN $command\r\n"
+    }
+
+    def volume(path) {
+        dockerfileInfo += "VOLUME $path\r\n"
+    }
+
+    def env(var, value) {
+        dockerfileInfo += "ENV $var $value\r\n"
+    }
+
+    def expose(port) {
+        dockerfileInfo += "EXPOSE $port\r\n"
+    }
+
+    def workdir(dir) {
+        dockerfileInfo += "WORKDIR $dir\r\n"
+    }
+
+    def cmd(command) {
+        dockerfileInfo += "CMD $command\r\n"
+    }
+
+    def entrypoint(command) {
+        dockerfileInfo += "ENTRYPOINT $command\r\n"
+    }
+
+    @TaskAction
+    def writeDockerfile() {
+        for (fileName in filesToCopy) {
+            def source = project.file(fileName)
+            def target = project.file("$dockerDir/$source.name")
+            target.parentFile.mkdirs()
+            target.delete()
+            target << source.bytes
+        }
+        def file = getDockerfileDestination()
+        file.parentFile.mkdirs()
+        file.write dockerfileInfo
+    }
+}

@@ -1,0 +1,41 @@
+task wrapper(type: Wrapper) {
+    gradleVersion = "2.14"
+}
+
+apply plugin: "idea"
+apply plugin: "java"
+apply plugin: "application"
+apply from: file("gradle/docker.gradle")
+
+mainClassName = "com.example.Main"
+applicationName = "myapp"
+applicationDefaultJvmArgs = [
+        "-Dmyapp.config.file=/etc/myapp/conf.properties",
+        "-Dlogback.configurationFile=/etc/myapp/logging.xml"]
+
+repositories {
+    mavenCentral()
+}
+
+task copyDist(type: Copy) {
+    dependsOn "installDist"
+    from "$buildDir/install/myapp"
+    into "/opt/myapp"
+}
+
+task copyConf(type: Copy) {
+    println "$projectDir/src/main/resources/conf/conf.properties"
+    from "$projectDir/src/main/resources/conf/conf.properties"
+    from "$projectDir/src/main/resources/conf/logging.xml"
+    into "/etc/myapp/"
+}
+
+dependencies {
+    dependencies {
+        compile "ch.qos.logback:logback-core:1.1.3"
+        compile "ch.qos.logback:logback-classic:1.1.3"
+        compile "org.slf4j:slf4j-api:1.7.12"
+    }
+}
+
+defaultTasks "clean", "build", "copyDist", "copyConf"
